@@ -502,7 +502,7 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
             }
         }
         auto jsonLength = sm.jsonStr.size();
-        bin::write(out, std::uint32_t(jsonLength));
+        bin::write(out, std::uint16_t(jsonLength));
         bin::write(out, &sm.jsonStr[0], sm.jsonStr.size());
     }
 }

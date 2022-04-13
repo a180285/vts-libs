@@ -489,6 +489,8 @@ void saveMesh(const fs::path &path, const Mesh &mesh, const Atlas *atlas)
 void saveMeshProper(std::ostream &out, const ConstSubMeshRange &submeshes
                     , const Atlas *atlas, bool compress)
 {
+    // TODO: fix compress
+    compress = false;
     if (!compress) {
         // non-compressed
         detail::saveMeshProper(out, submeshes, atlas);
