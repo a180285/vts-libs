@@ -266,9 +266,10 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
 
             if (version >= VERSION_MESHJSON) {
                 std::uint32_t jsonLength(versionedSize());
-
-                sm.jsonStr.resize(jsonLength);
-                bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());
+                if (jsonLength > 0) {
+                    sm.jsonStr.resize(jsonLength);
+                    bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());
+                }
             }
 
             ++ifacesTc;

@@ -737,10 +737,12 @@ void loadSubmeshVersion_withJson(std::istream &in, SubMesh &sm, std::uint8_t fla
             bin::read(in, index); (*ifacesTc)(2) = index;
             ++ifacesTc;
         }
+    }
 
-        // load json string
-        std::uint16_t jsonStrCount;
-        bin::read(in, jsonStrCount);
+    // load json string
+    std::uint16_t jsonStrCount;
+    bin::read(in, jsonStrCount);
+    if (jsonStrCount > 0) {
         sm.jsonStr.resize(jsonStrCount);
         bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());
     }
