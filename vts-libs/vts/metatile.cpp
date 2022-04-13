@@ -333,7 +333,16 @@ inline void MetaNode::save(std::ostream &out, const StoreParams &sp) const
 
     // limit texel size to fit inside half float
     // TODO: make better
-    auto ts(float((texelSize > 65000.0) ? 65000.0 : texelSize));
+    double texelSizeToWrite = texelSize;
+//    if (sp.lod > 17) {
+////        printf("sp.lod: %d, texelSize: %f\n", sp.lod, texelSize);
+//        if (texelSizeToWrite > 1) {
+//            texelSizeToWrite = 1.0;
+//        }
+//    }
+//    printf("sp.lod: %d, texelSizeToWrite: %f\n", sp.lod, texelSizeToWrite);
+
+    auto ts(float((texelSizeToWrite > 65000.0) ? 65000.0 : texelSizeToWrite));
     bin::write(out, std::uint16_t
                (half::float2half<std::round_to_nearest>(ts)));
     bin::write(out, std::uint16_t(displaySize));

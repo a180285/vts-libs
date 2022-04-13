@@ -68,6 +68,8 @@ struct SubMesh {
      */
     math::Points2d etc;
 
+    std::vector<char> jsonStr;
+
     /** Indices to face vertices.
      */
     Faces faces;
@@ -559,6 +561,7 @@ inline void SubMesh::cloneMetadataInto(SubMesh &dst) const
     dst.uvAreaScale = uvAreaScale;
     dst.surfaceReference = surfaceReference;
     dst.zIndex = zIndex;
+    dst.jsonStr = jsonStr;
 }
 
 UTILITY_GENERATE_ENUM_IO(SubMesh::TextureMode,

@@ -784,6 +784,7 @@ SubMesh clip(const SubMesh &mesh, const math::Points3d &projected
     (void) faceOrigin;
     // swap vertices with projected vertices (we are working in local system
     emesh.mesh.vertices.swap(emesh.projected);
+    emesh.mesh.jsonStr = mesh.jsonStr;
 
     // get output mesh
     const auto &out(emesh.mesh);
@@ -798,7 +799,6 @@ SubMesh clip(const SubMesh &mesh, const math::Points3d &projected
                << ", facesTc=" << mesh.facesTc.size()
                << "->" << out.facesTc.size()
                << ".";
-
     // and return
     return out;
 }

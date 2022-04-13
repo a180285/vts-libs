@@ -54,7 +54,8 @@ namespace {
 const char MAGIC[2] = { 'S', 'M' };
 const std::uint16_t VERSION_ORIGINAL = 1;
 const std::uint16_t VERSION_ZINDEX = 2;
-const std::uint16_t VERSION = VERSION_ZINDEX;
+const std::uint16_t VERSION_MESHJSON = 3;
+const std::uint16_t VERSION = VERSION_MESHJSON;
 
 bool isShort(std::size_t size) {
     return size <= std::numeric_limits<std::uint16_t>::max();
@@ -141,6 +142,10 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
                 bin::write(out, std::uint32_t((*ifacesTc)(1)));
                 bin::write(out, std::uint32_t((*ifacesTc)(2)));
             }
+
+            auto jsonLength = sm.jsonStr.size();
+            bin::write(out, std::uint32_t(jsonLength));
+            bin::write(out, &sm.jsonStr[0], sm.jsonStr.size());
 
             ++ifacesTc;
         }
@@ -257,6 +262,13 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
                 (*ifacesTc)(0) = bin::read<std::uint32_t>(in);
                 (*ifacesTc)(1) = bin::read<std::uint32_t>(in);
                 (*ifacesTc)(2) = bin::read<std::uint32_t>(in);
+            }
+
+            if (version >= VERSION_MESHJSON) {
+                std::uint32_t jsonLength(versionedSize());
+
+                sm.jsonStr.resize(jsonLength);
+                bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());
             }
 
             ++ifacesTc;

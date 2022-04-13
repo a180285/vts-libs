@@ -53,11 +53,13 @@ namespace bin = utility::binaryio;
 namespace vtslibs { namespace vts { namespace detail {
 
 namespace {
+    const std::uint16_t VERSION_MESHJSON = 0x0103;
+
     const char *NO_MESH_COMPRESSION(utility::getenv("NO_MESH_COMPRESSION"));
 
     // mesh proper
     const char MAGIC[2] = { 'M', 'E' };
-    const std::uint16_t VERSION = 3;
+    const std::uint16_t VERSION = VERSION_MESHJSON;
 
     // quantization coefficients
     const int GeomQuant = 1024;
@@ -406,7 +408,7 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
 
     // write header
     bin::write(out, MAGIC);
-    bin::write(out, std::uint16_t(2));
+    bin::write(out, std::uint16_t(VERSION_MESHJSON));
 
     // no mean undulation
     bin::write(out, double(0.0));
@@ -456,6 +458,7 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
         bin::write(out, std::uint16_t(sm.vertices.size()));
 
         auto ietc(sm.etc.begin());
+//        printf("sm.vertices.size: %ld\n", sm.vertices.size());
         for (const auto &vertex : sm.vertices) {
             saveVertexComponent(vertex(0), bbox.ll(0), bbsize(0));
             saveVertexComponent(vertex(1), bbox.ll(1), bbsize(1));
@@ -470,12 +473,15 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
 
         // save (internal) texture coordinates
         if (flags & SubMeshFlag::internalTexture) {
+//            printf("sm.tc.size: %ld\n", sm.tc.size());
             bin::write(out, std::uint16_t(sm.tc.size()));
             for (const auto &tc : sm.tc) {
                 saveTexCoord(tc(0));
                 saveTexCoord(tc(1));
             }
         }
+
+//        printf("sm.faces.size: %ld\n", sm.faces.size());
 
         // save faces
         bin::write(out, std::uint16_t(sm.faces.size()));
@@ -495,6 +501,9 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
                 ++ifacesTc;
             }
         }
+        auto jsonLength = sm.jsonStr.size();
+        bin::write(out, std::uint32_t(jsonLength));
+        bin::write(out, &sm.jsonStr[0], sm.jsonStr.size());
     }
 }
 
@@ -652,6 +661,92 @@ void loadSubmeshVersion3(std::istream &in, SubMesh &sm, std::uint8_t flags
     }
 }
 
+void loadSubmeshVersion_withJson(std::istream &in, SubMesh &sm, std::uint8_t flags
+        , const math::Extents3 &bbox)
+{
+    // helper functions
+    auto loadVertexComponent([&in](double o, double s) -> double
+                             {
+                                 std::uint16_t v;
+                                 bin::read(in, v);
+                                 return o + ((v * s) / std::numeric_limits<std::uint16_t>::max());
+                             });
+
+    auto loadTexCoord([&in]() -> double
+                      {
+                          std::uint16_t v;
+                          bin::read(in, v);
+                          return (double(v) / std::numeric_limits<std::uint16_t>::max());
+                      });
+
+    math::Point3d bbsize(bbox.ur - bbox.ll);
+
+    std::uint16_t vertexCount;
+    bin::read(in, vertexCount);
+    sm.vertices.resize(vertexCount);
+
+    if (flags & SubMeshFlag::externalTexture) {
+        sm.etc.resize(vertexCount);
+    }
+
+    // load all vertex components
+    auto ietc(sm.etc.begin());
+    for (auto &vertex : sm.vertices) {
+        vertex(0) = loadVertexComponent(bbox.ll(0), bbsize(0));
+        vertex(1) = loadVertexComponent(bbox.ll(1), bbsize(1));
+        vertex(2) = loadVertexComponent(bbox.ll(2), bbsize(2));
+
+        if (flags & SubMeshFlag::externalTexture) {
+            (*ietc)(0) = loadTexCoord();
+            (*ietc)(1) = loadTexCoord();
+            ++ietc;
+        }
+    }
+
+    // load (internal) texture coordinates
+    if (flags & SubMeshFlag::internalTexture) {
+        std::uint16_t tcCount;
+        bin::read(in, tcCount);
+        sm.tc.resize(tcCount);
+        for (auto &tc : sm.tc) {
+            tc(0) = loadTexCoord();
+            tc(1) = loadTexCoord();
+        }
+    }
+
+    // load faces
+    std::uint16_t faceCount;
+    bin::read(in, faceCount);
+    sm.faces.resize(faceCount);
+
+    if (flags & SubMeshFlag::internalTexture) {
+        sm.facesTc.resize(faceCount);
+    }
+    auto ifacesTc(sm.facesTc.begin());
+
+    for (auto &face : sm.faces) {
+        std::uint16_t index;
+        bin::read(in, index); face(0) = index;
+        bin::read(in, index); face(1) = index;
+        bin::read(in, index); face(2) = index;
+
+        // load (optional) texture coordinate indices
+        if (flags & SubMeshFlag::internalTexture) {
+            bin::read(in, index); (*ifacesTc)(0) = index;
+            bin::read(in, index); (*ifacesTc)(1) = index;
+            bin::read(in, index); (*ifacesTc)(2) = index;
+            ++ifacesTc;
+        }
+
+        // load json string
+        std::uint16_t jsonStrCount;
+        bin::read(in, jsonStrCount);
+        sm.jsonStr.resize(jsonStrCount);
+        bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());
+    }
+}
+
+
 void loadSubmeshVersion2(std::istream &in, SubMesh &sm, std::uint8_t flags
                          , const math::Extents3 &bbox)
 {
@@ -739,6 +834,14 @@ inline SubMesh& getSubmesh(NormalizedSubMesh &sm) { return sm.submesh; }
 
 // helpers normalized bbox
 const math::Extents3 normBbox(-1.0, -1.0, -1.0, +1.0, +1.0, +1.0);
+
+inline void loadSubmeshVersion_withJson(std::istream &in, NormalizedSubMesh &sm
+        , std::uint8_t flags
+        , const math::Extents3 &bbox)
+{
+    loadSubmeshVersion_withJson(in, sm.submesh, flags, normBbox);
+    sm.extents = bbox;
+}
 
 inline void loadSubmeshVersion2(std::istream &in, NormalizedSubMesh &sm
                                 , std::uint8_t flags
@@ -834,8 +937,10 @@ void loadMeshProperImpl(std::istream &in, const fs::path &path
         bin::read(in, bbox.ur(0));
         bin::read(in, bbox.ur(1));
         bin::read(in, bbox.ur(2));
-
-        if (version >= 3) {
+        if (version >= VERSION_MESHJSON) {
+            loadSubmeshVersion_withJson(in, meshItem, flags, bbox);
+        }
+        else if (version >= 3) {
             loadSubmeshVersion3(in, meshItem, flags, bbox);
         } else {
             loadSubmeshVersion2(in, meshItem, flags, bbox);
