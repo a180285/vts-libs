@@ -119,36 +119,40 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
         // save faces
         bin::write(out, std::uint32_t(sm.faces.size()));
 
-        auto ifacesTc(sm.facesTc.begin());
-        for (auto &face : sm.faces) {
-            // face
-            if (shortVertices) {
+        // face
+        if (shortVertices) {
+            for (auto &face : sm.faces) {
                 bin::write(out, std::uint16_t(face(0)));
                 bin::write(out, std::uint16_t(face(1)));
                 bin::write(out, std::uint16_t(face(2)));
-            } else {
+            }
+        } else {
+            for (auto &face : sm.faces) {
                 bin::write(out, std::uint32_t(face(0)));
                 bin::write(out, std::uint32_t(face(1)));
                 bin::write(out, std::uint32_t(face(2)));
             }
-
-            // tc face
-            if (shortTc) {
-                bin::write(out, std::uint16_t((*ifacesTc)(0)));
-                bin::write(out, std::uint16_t((*ifacesTc)(1)));
-                bin::write(out, std::uint16_t((*ifacesTc)(2)));
-            } else {
-                bin::write(out, std::uint32_t((*ifacesTc)(0)));
-                bin::write(out, std::uint32_t((*ifacesTc)(1)));
-                bin::write(out, std::uint32_t((*ifacesTc)(2)));
-            }
-
-            auto jsonLength = sm.jsonStr.size();
-            bin::write(out, std::uint32_t(jsonLength));
-            bin::write(out, &sm.jsonStr[0], sm.jsonStr.size());
-
-            ++ifacesTc;
         }
+
+        // tc face
+        if (shortTc) {
+            for (auto &faceTc : sm.facesTc) {
+                bin::write(out, std::uint16_t((faceTc)(0)));
+                bin::write(out, std::uint16_t((faceTc)(1)));
+                bin::write(out, std::uint16_t((faceTc)(2)));
+            }
+        } else {
+            for (auto &faceTc : sm.facesTc) {
+                bin::write(out, std::uint32_t((faceTc)(0)));
+                bin::write(out, std::uint32_t((faceTc)(1)));
+                bin::write(out, std::uint32_t((faceTc)(2)));
+            }
+        }
+
+
+        auto jsonLength = sm.jsonStr.size();
+        bin::write(out, std::uint32_t(jsonLength));
+        bin::write(out, &sm.jsonStr[0], sm.jsonStr.size());
 
         // write zIndex
         bin::write(out, std::uint32_t(sm.zIndex));
@@ -241,38 +245,45 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
         std::uint32_t faceCount(versionedSize());
         sm.faces.resize(faceCount);
         sm.facesTc.resize(faceCount);
-        auto ifacesTc(sm.facesTc.begin());
 
-        for (auto &face : sm.faces) {
-            if (shortVertices) {
-                face(0) = bin::read<std::uint16_t>(in);
-                face(1) = bin::read<std::uint16_t>(in);
-                face(2) = bin::read<std::uint16_t>(in);
-            } else {
-                face(0) = bin::read<std::uint32_t>(in);
-                face(1) = bin::read<std::uint32_t>(in);
-                face(2) = bin::read<std::uint32_t>(in);
+        if (shortVertices) {
+            for (auto &face : sm.faces) {
+                std::uint16_t index;
+                bin::read(in, index); face(0) = index;
+                bin::read(in, index); face(1) = index;
+                bin::read(in, index); face(2) = index;
             }
-
-            if (shortTc) {
-                (*ifacesTc)(0) = bin::read<std::uint16_t>(in);
-                (*ifacesTc)(1) = bin::read<std::uint16_t>(in);
-                (*ifacesTc)(2) = bin::read<std::uint16_t>(in);
-            } else {
-                (*ifacesTc)(0) = bin::read<std::uint32_t>(in);
-                (*ifacesTc)(1) = bin::read<std::uint32_t>(in);
-                (*ifacesTc)(2) = bin::read<std::uint32_t>(in);
+        } else {
+            for (auto &face: sm.faces) {
+                std::uint32_t index;
+                bin::read(in, index); face(0) = index;
+                bin::read(in, index); face(1) = index;
+                bin::read(in, index); face(2) = index;
             }
+        }
 
-            if (version >= VERSION_MESHJSON) {
-                std::uint32_t jsonLength(versionedSize());
-                if (jsonLength > 0) {
-                    sm.jsonStr.resize(jsonLength);
-                    bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());
-                }
+        if (shortTc) {
+            for (auto &faceTc : sm.facesTc) {
+                std::uint16_t index;
+                bin::read(in, index); (faceTc)(0) = index;
+                bin::read(in, index); (faceTc)(1) = index;
+                bin::read(in, index); (faceTc)(2) = index;
             }
+        } else {
+            for (auto &faceTc : sm.facesTc) {
+                std::uint32_t index;
+                bin::read(in, index); (faceTc)(0) = index;
+                bin::read(in, index); (faceTc)(1) = index;
+                bin::read(in, index); (faceTc)(2) = index;
+            }
+        }
 
-            ++ifacesTc;
+        if (version >= VERSION_MESHJSON) {
+            std::uint32_t jsonLength(versionedSize());
+            if (jsonLength > 0) {
+                sm.jsonStr.resize(jsonLength);
+                bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());
+            }
         }
 
         if (version >= VERSION_ZINDEX) {
