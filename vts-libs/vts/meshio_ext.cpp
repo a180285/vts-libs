@@ -63,6 +63,7 @@ void loadSubmeshVersion_VERSION_WITH_NORMAL(std::istream &in, SubMesh &sm, std::
     // load normal
     std::uint32_t normalCount;
     bin::read(in, normalCount);
+//    printf("load normalCount: %d\n", normalCount);
     bool isShortNormalIndex =  (isShort(normalCount));
     sm.normals.resize(normalCount);
     for (auto &normal : sm.normals) {
@@ -88,6 +89,7 @@ void loadSubmeshVersion_VERSION_WITH_NORMAL(std::istream &in, SubMesh &sm, std::
     std::uint32_t faceCount;
     bin::read(in, faceCount);
     sm.faces.resize(faceCount);
+    sm.normalIndexes.resize(faceCount);
 
     if (flags & SubMeshFlag::internalTexture) {
         sm.facesTc.resize(faceCount);
