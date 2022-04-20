@@ -26,7 +26,7 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/restrict.hpp>
-
+#include <unordered_map>
 #include "dbglog/dbglog.hpp"
 
 #include "utility/expect.hpp"
@@ -278,6 +278,27 @@ MeshArea area(const Mesh &mesh, const VertexMasks &masks)
     return out;
 }
 
+struct Point3dHasher
+{
+    std::size_t operator()(const math::Point3d& k) const
+    {
+        using boost::hash_value;
+        using boost::hash_combine;
+
+        // Start with a hash value of 0.
+        std::size_t seed = 0;
+
+        // Modify 'seed' by XORing and bit-shifting in
+        // one member of 'Key' after the other:
+        hash_combine(seed,hash_value(k[0]));
+        hash_combine(seed,hash_value(k[1]));
+        hash_combine(seed,hash_value(k[2]));
+
+        // Return the result.
+        return seed;
+    }
+};
+
 SubMesh SubMesh::cleanUp() const
 {
     SubMesh ret;
@@ -285,10 +306,12 @@ SubMesh SubMesh::cleanUp() const
 
     // make room
     ret.vertices.reserve(vertices.size());
+    ret.normals.reserve(normals.size());
     ret.etc.reserve(etc.size());
     ret.tc.reserve(tc.size());
     ret.faces.reserve(faces.size());
     ret.facesTc.reserve(facesTc.size());
+    ret.normalIndexes.reserve(normalIndexes.size());
 
     bool hasEtc(!etc.empty());
     bool hasTc(!tc.empty());
@@ -372,9 +395,11 @@ SubMesh SubMesh::cleanUp() const
         tcVertex = idx;
     });
 
+    std::unordered_map<math::Point3d, int, Point3dHasher> normalToIndexMap;
     // copy faces, skip degenerate ones
     auto itc(facesTc.cbegin());
-    for (const auto &face : faces) {
+    for (uint64_t faceIdx = 0; faceIdx < faces.size(); faceIdx++) {
+        const auto& face = faces[faceIdx];
         // skip degenerate
         if ((face(0) == face(1)) || (face(1) == face(2))
             || (face(2) == face(0)))
@@ -395,6 +420,20 @@ SubMesh SubMesh::cleanUp() const
             auto &tface(ret.facesTc.back());
             for (int i = 0; i < 3; i++) {
                 addTc(tface(i), rface(i));
+            }
+        }
+        if (!normalIndexes.empty()) {
+            const auto& faceNormalIndex = normalIndexes[faceIdx];
+            ret.normalIndexes.emplace_back();
+            auto& newNormalIndex = ret.normalIndexes.back();
+            for (int i = 0; i < 3; i++) {
+                const auto& normal = normals[faceNormalIndex[i]];
+                auto findIt = normalToIndexMap.find(normal);
+                if (findIt == normalToIndexMap.end()) {
+                    findIt = normalToIndexMap.emplace(normal, ret.normals.size()).first;
+                    ret.normals.push_back(normal);
+                }
+                newNormalIndex[i] = findIt->second;
             }
         }
     }

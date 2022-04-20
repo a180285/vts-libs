@@ -480,7 +480,7 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
 
         // write normals
         bin::write(out, std::uint32_t(sm.normals.size()));
-//        printf("sm.normals.size(): %ld\n", sm.normals.size());
+//        printf("meshio save --> sm.normals.size(): %ld\n", sm.normals.size());
 
         const bool isShortNormalIndex(isShort(sm.normals.size()));
         for (const auto &normal : sm.normals) {
