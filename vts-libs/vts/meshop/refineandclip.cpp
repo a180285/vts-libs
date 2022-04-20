@@ -29,6 +29,7 @@
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/member.hpp>
+#include <Eigen/Geometry>
 
 #include "dbglog/dbglog.hpp"
 
@@ -117,6 +118,7 @@ typedef boost::optional<Face> OFace;
 
 struct ClipFace {
     Face face;
+    OFace normalIndex;
     OFace faceTc;
     unsigned int origin;
 
@@ -170,7 +172,7 @@ private:
 class Clipper {
 public:
     Clipper(const EnhancedSubMesh &mesh, const VertexMask &mask)
-        : mesh_(mesh.mesh), fpmap_(mesh.projected), ftpmap_(mesh_.tc)
+        : mesh_(mesh.mesh), fpmap_(mesh.projected), ftpmap_(mesh_.tc), normalMapper_(mesh_.normals)
     {
         extractFaces();
         // TODO: apply mask
@@ -178,7 +180,7 @@ public:
     }
 
     Clipper(const SubMesh &mesh, const VertexMask &mask)
-        : mesh_(mesh), fpmap_(mesh.vertices), ftpmap_(mesh_.tc)
+        : mesh_(mesh), fpmap_(mesh.vertices), ftpmap_(mesh_.tc), normalMapper_(mesh_.normals)
     {
         extractFaces();
         // TODO: apply mask
@@ -187,7 +189,7 @@ public:
 
     Clipper(const SubMesh &mesh, const math::Points3d &projected
             , const VertexMask &mask)
-        : mesh_(mesh), fpmap_(projected), ftpmap_(mesh_.tc)
+        : mesh_(mesh), fpmap_(projected), ftpmap_(mesh_.tc), normalMapper_(mesh_.normals)
     {
         extractFaces();
         // TODO: apply mask
@@ -205,10 +207,22 @@ public:
 
 private:
     void extractFaces() {
-        bool hasTc(!mesh_.facesTc.empty());
         for (std::size_t i(0), e(mesh_.faces.size()); i != e; ++i) {
             faces_.emplace_back(mesh_.faces[i], i);
-            if (hasTc) { faces_.back().faceTc = mesh_.facesTc[i]; }
+        }
+
+        bool hasTc(!mesh_.facesTc.empty());
+        if (hasTc) {
+            for (std::size_t i(0), e(mesh_.faces.size()); i != e; ++i) {
+                faces_[i].faceTc = mesh_.facesTc[i];
+            }
+        }
+
+        bool hasNormal(!mesh_.normalIndexes.empty());
+        if (hasNormal) {
+            for (std::size_t i(0), e(mesh_.faces.size()); i != e; ++i) {
+                faces_[i].normalIndex = mesh_.normalIndexes[i];
+            }
         }
     }
 
@@ -221,6 +235,8 @@ private:
 
     // face texture points map
     PointMapper<math::Point2d> ftpmap_;
+    PointMapper<math::Point3d> normalMapper_;
+
 };
 
 /** Use to uniformly map face vertices to fixed names.
@@ -242,6 +258,7 @@ void Clipper::clip(const ClipPlane &line)
     ClipFace::list out;
 
     const auto &vertices(fpmap_.points());
+    const auto &normals(normalMapper_.points());
     const auto &tc(ftpmap_.points());
 
     for (const auto cf : faces_) {
@@ -329,6 +346,41 @@ void Clipper::clip(const ClipPlane &line)
                 //     << "\n    " << p1
                 //     << "\n    " << tri[vm.c]
                 //     << "\n    " << p2;
+            }
+
+            if (cf.normalIndex) {
+                auto normalIndex(*cf.normalIndex);
+
+                const auto& normalA = normals[normalIndex[vm.a]];
+                const auto& normalB = normals[normalIndex[vm.b]];
+                const auto& normalC = normals[normalIndex[vm.c]];
+                Eigen::Quaterniond qA;
+                qA.w() = 0;
+                qA.vec() = Eigen::Vector3d(normalA[0], normalA[1], normalA[2]);
+                Eigen::Quaterniond qB;
+                qB.w() = 0;
+                qB.vec() = Eigen::Vector3d(normalB[0], normalB[1], normalB[2]);
+                Eigen::Quaterniond qC;
+                qC.w() = 0;
+                qC.vec() = Eigen::Vector3d(normalC[0], normalC[1], normalC[2]);
+
+//                Segment3 s1(tri[vm.a], tri[vm.b]);
+//                Segment3 s2(tri[vm.c], tri[vm.a]);
+                auto q1 = qA.slerp(t1, qB);
+                auto q2 = qC.slerp(t2, qA);
+                auto tmp_n1 = q1.vec();
+                auto tmp_n2 = q2.vec();
+                auto ni1(normalMapper_.add({tmp_n1[0], tmp_n1[1], tmp_n1[2]}));
+                auto ni2(normalMapper_.add({tmp_n2[0], tmp_n2[1], tmp_n2[2]}));
+
+                if (oneInside) {
+                    // one vertex inside: just one face:
+                    out.back().normalIndex = Face(normalIndex[vm.a], ni1, ni2);
+                } else {
+                    // one vertex outside: two new faces
+                    out[out.size() - 2].normalIndex = Face(ni1, normalIndex[vm.b], normalIndex[vm.c]);
+                    out[out.size() - 1].normalIndex = Face(ni1, normalIndex[vm.c], ni2);
+                }
             }
         }
 
@@ -642,11 +694,13 @@ EnhancedSubMesh Clipper::mesh(const MeshVertexConvertor *convertor
         const math::Points3d &vertices;
         const math::Points3d &projected;
         const math::Points2d &tc;
+        const math::Points3d &normals;
         const MeshVertexConvertor *convertor;
         FaceOriginList *faceOrigin;
 
         std::vector<int> vertexMap;
         std::vector<int> tcMap;
+        std::vector<int> normalMap;
 
         EnhancedSubMesh emesh;
         SubMesh &mesh;
@@ -654,13 +708,15 @@ EnhancedSubMesh Clipper::mesh(const MeshVertexConvertor *convertor
         Filter(const SubMesh &original, const ClipFace::list &faces
                , const math::Points3d &projected
                , const math::Points2d &tc
+               , const math::Points3d &normals
                , const MeshVertexConvertor *convertor
                , FaceOriginList *faceOrigin)
             : original(original), faces(faces), vertices(original.vertices)
-            , projected(projected), tc(tc), convertor(convertor)
+            , projected(projected), tc(tc), normals(normals), convertor(convertor)
             , faceOrigin(faceOrigin)
             , vertexMap(projected.size(), -1)
             , tcMap(tc.size(), -1)
+            , normalMap(normals.size(), -1)
             , mesh(emesh.mesh)
         {
             // clone metadata into output mesh
@@ -681,8 +737,11 @@ EnhancedSubMesh Clipper::mesh(const MeshVertexConvertor *convertor
                 mesh.facesTc.emplace_back(addTc((*cf.faceTc)(0))
                                           , addTc((*cf.faceTc)(1))
                                           , addTc((*cf.faceTc)(2)));
-                // LOG(debug) << "Added tc face: " << *cf.faceTc << " -> "
-                //            << mesh.facesTc.back();
+            }
+            if (cf.normalIndex) {
+                mesh.normalIndexes.emplace_back(addNormal((*cf.normalIndex)(0))
+                        , addNormal((*cf.normalIndex)(1))
+                        , addNormal((*cf.normalIndex)(2)));
             }
 
             if (faceOrigin) { faceOrigin->push_back(cf.origin); }
@@ -728,6 +787,16 @@ EnhancedSubMesh Clipper::mesh(const MeshVertexConvertor *convertor
             return m;
         }
 
+        int addNormal(int i) {
+            auto &m(normalMap[i]);
+            if (m < 0) {
+                // new vertex
+                m = mesh.normals.size();
+                mesh.normals.push_back(normals[i]);
+            }
+            return m;
+        }
+
         int addTc(int i) {
             auto &m(tcMap[i]);
             if (m < 0) {
@@ -741,7 +810,7 @@ EnhancedSubMesh Clipper::mesh(const MeshVertexConvertor *convertor
 
     // run the machinery
     return Filter(mesh_, faces_, fpmap_.points()
-                  , ftpmap_.points()
+                  , ftpmap_.points(), normalMapper_.points()
                   , convertor, faceOrigin).emesh;
 }
 

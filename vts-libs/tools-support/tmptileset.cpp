@@ -55,7 +55,8 @@ const char MAGIC[2] = { 'S', 'M' };
 const std::uint16_t VERSION_ORIGINAL = 1;
 const std::uint16_t VERSION_ZINDEX = 2;
 const std::uint16_t VERSION_MESHJSON = 3;
-const std::uint16_t VERSION = VERSION_MESHJSON;
+const std::uint16_t VERSION_WITH_NORMAL = 4;
+const std::uint16_t VERSION = VERSION_WITH_NORMAL;
 
 bool isShort(std::size_t size) {
     return size <= std::numeric_limits<std::uint16_t>::max();
@@ -76,6 +77,13 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
     {
         v = std::round(math::clamp(v, 0.0, 1.0)
                        * std::numeric_limits<std::uint32_t>::max());
+        bin::write(out, std::uint32_t(v));
+    });
+
+    auto saveNormal([&out](double v){
+        assert(v >= -1 && v <= 1);
+        v = std::round(math::clamp((v + 1) / 2, 0.0, 1.0)
+                     * std::numeric_limits<std::uint32_t>::max());
         bin::write(out, std::uint32_t(v));
     });
 
@@ -101,6 +109,7 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
 
         // write vertices
         bin::write(out, std::uint32_t(sm.vertices.size()));
+//        printf("sm.vertices.size(): %ld\n", sm.vertices.size());
         const bool shortVertices(isShort(sm.vertices.size()));
         for (const auto &vertex : sm.vertices) {
             saveVertexComponent(vertex(0), bbox.ll(0), bbsize(0));
@@ -110,14 +119,28 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
 
         // write tc
         bin::write(out, std::uint32_t(sm.tc.size()));
+//        printf("sm.tc.size(): %ld\n", sm.tc.size());
+
         const bool shortTc(isShort(sm.tc.size()));
         for (const auto &tc : sm.tc) {
             saveTexCoord(tc(0));
             saveTexCoord(tc(1));
         }
 
+        // write normals
+        bin::write(out, std::uint32_t(sm.normals.size()));
+//        printf("sm.normals.size(): %ld\n", sm.normals.size());
+
+        const bool isShortNormalIndex(isShort(sm.normals.size()));
+        for (const auto &normal : sm.normals) {
+            saveNormal(normal[0]);
+            saveNormal(normal[1]);
+            saveNormal(normal[2]);
+        }
+
         // save faces
         bin::write(out, std::uint32_t(sm.faces.size()));
+//        printf("sm.faces.size(): %ld\n", sm.faces.size());
 
         // face
         if (shortVertices) {
@@ -149,8 +172,24 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
             }
         }
 
+        // Normal face
+        if (isShortNormalIndex) {
+            for (auto &normalIndex : sm.normalIndexes) {
+                bin::write(out, std::uint16_t((normalIndex)(0)));
+                bin::write(out, std::uint16_t((normalIndex)(1)));
+                bin::write(out, std::uint16_t((normalIndex)(2)));
+            }
+        } else {
+            for (auto &normalIndex : sm.normalIndexes) {
+                bin::write(out, std::uint32_t((normalIndex)(0)));
+                bin::write(out, std::uint32_t((normalIndex)(1)));
+                bin::write(out, std::uint32_t((normalIndex)(2)));
+            }
+        }
 
         auto jsonLength = sm.jsonStr.size();
+//        printf("jsonLength: %ld\n", jsonLength);
+
         bin::write(out, std::uint32_t(jsonLength));
         bin::write(out, &sm.jsonStr[0], sm.jsonStr.size());
 
@@ -174,6 +213,12 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
         std::uint32_t v;
         bin::read(in, v);
         return (double(v) / std::numeric_limits<std::uint32_t>::max());
+    });
+
+    auto loadNormal([&in]() -> double {
+        std::uint32_t v;
+        bin::read(in, v);
+        return (double(v) / std::numeric_limits<std::uint32_t>::max()) * 2 - 1;
     });
 
     // Load mesh headers first
@@ -224,6 +269,8 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
 
         // load vertices
         auto vertexCount(versionedSize());
+//        printf("load vertexCount: %d\n", vertexCount);
+
         const bool shortVertices(isShort(vertexCount));
         sm.vertices.resize(vertexCount);
         for (auto &vertex : sm.vertices) {
@@ -234,6 +281,8 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
 
         // load tc
         auto tcCount(versionedSize());
+//        printf("load tcCount: %d\n", tcCount);
+
         const bool shortTc(isShort(tcCount));
         sm.tc.resize(tcCount);
         for (auto &tc : sm.tc) {
@@ -241,10 +290,29 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
             tc(1) = loadTexCoord();
         }
 
+        bool isShortNormalIndex = false;
+        if (version >= VERSION_WITH_NORMAL) {
+            // load normal
+            auto normalCount(versionedSize());
+//            printf("load normalCount: %d\n", normalCount);
+
+            isShortNormalIndex = (isShort(normalCount));
+            sm.normals.resize(normalCount);
+            for (auto &normal : sm.normals) {
+                normal[0] = loadNormal();
+                normal[1] = loadNormal();
+                normal[2] = loadNormal();
+            }
+        }
+
+
         // load faces
         std::uint32_t faceCount(versionedSize());
+//        printf("load faceCount: %d\n", faceCount);
+
         sm.faces.resize(faceCount);
         sm.facesTc.resize(faceCount);
+        sm.normalIndexes.resize(faceCount);
 
         if (shortVertices) {
             for (auto &face : sm.faces) {
@@ -278,8 +346,28 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
             }
         }
 
+        if (version >= VERSION_WITH_NORMAL) {
+            if (isShortNormalIndex) {
+                for (auto &normalIndex : sm.normalIndexes) {
+                    std::uint16_t index;
+                    bin::read(in, index); (normalIndex)(0) = index;
+                    bin::read(in, index); (normalIndex)(1) = index;
+                    bin::read(in, index); (normalIndex)(2) = index;
+                }
+            } else {
+                for (auto &normalIndex : sm.normalIndexes) {
+                    std::uint32_t index;
+                    bin::read(in, index); (normalIndex)(0) = index;
+                    bin::read(in, index); (normalIndex)(1) = index;
+                    bin::read(in, index); (normalIndex)(2) = index;
+                }
+            }
+        }
+
         if (version >= VERSION_MESHJSON) {
             std::uint32_t jsonLength(versionedSize());
+//            printf("load jsonLength: %d\n", jsonLength);
+
             if (jsonLength > 0) {
                 sm.jsonStr.resize(jsonLength);
                 bin::read(in, &sm.jsonStr[0], sm.jsonStr.size());

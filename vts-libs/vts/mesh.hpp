@@ -58,6 +58,7 @@ struct SubMesh {
     /** Vertices
      */
     math::Points3d vertices;
+    math::Points3d normals;
 
     /** Internal texture coordinates (empty if none).
      */
@@ -73,6 +74,7 @@ struct SubMesh {
     /** Indices to face vertices.
      */
     Faces faces;
+    Faces normalIndexes;
 
     /** Indices to internal texture coordinates (empty if none, otherwise must
      *  have the same size as faces).

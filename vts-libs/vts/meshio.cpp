@@ -45,6 +45,7 @@
 
 #include "mesh.hpp"
 #include "atlas.hpp"
+#include "meshio_ext.hpp"
 
 namespace fs = boost::filesystem;
 namespace bio = boost::iostreams;
@@ -56,30 +57,20 @@ namespace {
     const std::uint16_t VERSION_2 = 2;
     const std::uint16_t VERSION_MESHJSON = 0x0103;
     const std::uint16_t VERSION_U32_VERTICES = 0x0104;
+    const std::uint16_t VERSION_WITH_NORMAL = 0x0105;
 
     const char *NO_MESH_COMPRESSION(utility::getenv("NO_MESH_COMPRESSION"));
 
     // mesh proper
     const char MAGIC[2] = { 'M', 'E' };
 
-    const std::uint16_t VERSION = VERSION_U32_VERTICES;
+    const std::uint16_t VERSION = VERSION_WITH_NORMAL;
 
     // quantization coefficients
     const int GeomQuant = 1024;
     const int TexCoordSubPixelBits = 3;
     const int DefaultTextureSize = 256; // if atlas size unknown
 
-    struct SubMeshFlag { enum : std::uint8_t {
-        internalTexture = 0x1
-        , externalTexture = 0x2
-        /*, reserved = 0x4 */
-        , textureMode = 0x8
-    }; };
-
-
-    bool isShort(std::size_t size) {
-        return size <= std::numeric_limits<std::uint16_t>::max();
-    }
 } // namespace
 
 #ifndef VTSLIBS_BROWSER_ONLY
@@ -414,6 +405,13 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
         bin::write(out, std::uint16_t(v));
     });
 
+    auto saveNormal([&out](double v){
+        assert(v >= -1 && v <= 1);
+        v = std::round(math::clamp((v + 1) / 2, 0.0, 1.0)
+                       * std::numeric_limits<std::uint32_t>::max());
+        bin::write(out, std::uint32_t(v));
+    });
+
     // write header
     bin::write(out, MAGIC);
     bin::write(out, std::uint16_t(VERSION));
@@ -480,6 +478,17 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
             }
         }
 
+        // write normals
+        bin::write(out, std::uint32_t(sm.normals.size()));
+//        printf("sm.normals.size(): %ld\n", sm.normals.size());
+
+        const bool isShortNormalIndex(isShort(sm.normals.size()));
+        for (const auto &normal : sm.normals) {
+            saveNormal(normal[0]);
+            saveNormal(normal[1]);
+            saveNormal(normal[2]);
+        }
+
         bool isShortTc = true;
         // save (internal) texture coordinates
         if (flags & SubMeshFlag::internalTexture) {
@@ -522,6 +531,21 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
                     bin::write(out, std::uint32_t((faceTc)(1)));
                     bin::write(out, std::uint32_t((faceTc)(2)));
                 }
+            }
+        }
+
+        // Normal face
+        if (isShortNormalIndex) {
+            for (auto &normalIndex : sm.normalIndexes) {
+                bin::write(out, std::uint16_t((normalIndex)(0)));
+                bin::write(out, std::uint16_t((normalIndex)(1)));
+                bin::write(out, std::uint16_t((normalIndex)(2)));
+            }
+        } else {
+            for (auto &normalIndex : sm.normalIndexes) {
+                bin::write(out, std::uint32_t((normalIndex)(0)));
+                bin::write(out, std::uint32_t((normalIndex)(1)));
+                bin::write(out, std::uint32_t((normalIndex)(2)));
             }
         }
 
@@ -967,8 +991,6 @@ inline SubMesh& getSubmesh(SubMesh& sm) { return sm; }
 // get submesh from normalized submesh
 inline SubMesh& getSubmesh(NormalizedSubMesh &sm) { return sm.submesh; }
 
-// helpers normalized bbox
-const math::Extents3 normBbox(-1.0, -1.0, -1.0, +1.0, +1.0, +1.0);
 
 inline void loadSubmeshVersion_VERSION_U32_VERTICES(std::istream &in, NormalizedSubMesh &sm
         , std::uint8_t flags
@@ -1080,7 +1102,10 @@ void loadMeshProperImpl(std::istream &in, const fs::path &path
         bin::read(in, bbox.ur(0));
         bin::read(in, bbox.ur(1));
         bin::read(in, bbox.ur(2));
-        if (version >= VERSION_U32_VERTICES) {
+        if (version >= VERSION_WITH_NORMAL) {
+            loadSubmeshVersion_VERSION_WITH_NORMAL(in, meshItem, flags, bbox);
+        }
+        else if (version >= VERSION_U32_VERTICES) {
             loadSubmeshVersion_VERSION_U32_VERTICES(in, meshItem, flags, bbox);
         } else if (version >= VERSION_MESHJSON) {
             loadSubmeshVersion_withJson(in, meshItem, flags, bbox);

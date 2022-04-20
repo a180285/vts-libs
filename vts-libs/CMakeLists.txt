@@ -180,6 +180,7 @@ set(vts-core_SOURCES
   vts/nodeinfo.hpp vts/nodeinfo.cpp
   vts/mesh.hpp vts/mesh.cpp
   vts/meshio.hpp vts/meshio.cpp
+        vts/meshio_ext.hpp vts/meshio_ext.cpp
   vts/metatile.hpp vts/metatile.cpp
   vts/csconvertor.hpp vts/csconvertor.cpp
   vts/math.hpp
@@ -197,7 +198,7 @@ set(vts-core_SOURCES
   vts/virtualsurface.cpp
   vts/tsmap.hpp vts/tsmap.cpp
   vts/atmospheredensitytexture.hpp vts/atmospheredensitytexture.cpp
-  )
+        )
 
 if(NOT VTSLIBS_BROWSER_ONLY)
   list(APPEND vts-core_SOURCES
@@ -254,7 +255,7 @@ if(NOT VTSLIBS_BROWSER_ONLY)
     vts/storageview/config.hpp vts/storageview/config.cpp
 
     vts/service.hpp vts/service.cpp
-    )
+)
 endif()
 
 set(vts-core_EXTRA_DEFINITIONS)
