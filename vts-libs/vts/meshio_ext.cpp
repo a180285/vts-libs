@@ -83,6 +83,7 @@ void loadSubmeshVersion_VERSION_FLOAT_UV(std::istream &in, SubMesh &sm, std::uin
     std::uint32_t faceCount;
     bin::read(in, faceCount);
     sm.faces.resize(faceCount);
+    sm.normalIndexes.resize(faceCount);
 
     if (flags & SubMeshFlag::internalTexture) {
         sm.facesTc.resize(faceCount);
