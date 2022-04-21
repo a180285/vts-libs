@@ -50,6 +50,8 @@ void loadSubmeshVersion_VERSION_FLOAT_UV(std::istream &in, SubMesh &sm, std::uin
             float v;
             bin::read(in, v); (*ietc)(0) = v;
             bin::read(in, v); (*ietc)(1) = v;
+
+//            printf("ietc: %.6f %.6f\n", (*ietc)(0), (*ietc)(1));
             ++ietc;
         }
     }
@@ -76,6 +78,7 @@ void loadSubmeshVersion_VERSION_FLOAT_UV(std::istream &in, SubMesh &sm, std::uin
             float v;
             bin::read(in, v); tc(0) = v;
             bin::read(in, v); tc(1) = v;
+//            printf("tc: %.6f %.6f\n", tc(0), tc(1));
         }
     }
 
@@ -194,6 +197,7 @@ void loadSubmeshVersion_VERSION_WITH_NORMAL(std::istream &in, SubMesh &sm, std::
         if (flags & SubMeshFlag::externalTexture) {
             (*ietc)(0) = loadTexCoord();
             (*ietc)(1) = loadTexCoord();
+//            printf("ietc: %.6f %.6f\n", (*ietc)(0), (*ietc)(1));
             ++ietc;
         }
     }
@@ -220,6 +224,7 @@ void loadSubmeshVersion_VERSION_WITH_NORMAL(std::istream &in, SubMesh &sm, std::
         for (auto &tc : sm.tc) {
             tc(0) = loadTexCoord();
             tc(1) = loadTexCoord();
+//            printf("ietc: %.6f %.6f\n", (tc)(0), (tc)(1));
         }
     }
 
