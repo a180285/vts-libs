@@ -458,8 +458,8 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
             saveVertexComponent(vertex(2), bbox.ll(2), bbsize(2));
 
             if (flags & SubMeshFlag::externalTexture) {
-                bin::write(out, std::float_t((*ietc)(0)));
-                bin::write(out, std::float_t((*ietc)(1)));
+                bin::write(out, float((*ietc)(0)));
+                bin::write(out, float((*ietc)(1)));
                 ++ietc;
             }
         }
@@ -482,8 +482,8 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
             bin::write(out, std::uint32_t(sm.tc.size()));
             isShortTc = isShort(sm.tc.size());
             for (const auto &tc : sm.tc) {
-                bin::write(out, std::float_t(tc(0)));
-                bin::write(out, std::float_t(tc(1)));
+                bin::write(out, float(tc(0)));
+                bin::write(out, float(tc(1)));
             }
         }
 

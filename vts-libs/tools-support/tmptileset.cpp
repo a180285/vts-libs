@@ -117,8 +117,8 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
 
         const bool shortTc(isShort(sm.tc.size()));
         for (const auto &tc : sm.tc) {
-            bin::write(out, std::float_t(tc[0]));
-            bin::write(out, std::float_t(tc[1]));
+            bin::write(out, float(tc[0]));
+            bin::write(out, float(tc[1]));
         }
 
         // write normals
@@ -273,7 +273,7 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
         const bool shortTc(isShort(tcCount));
         sm.tc.resize(tcCount);
         for (auto &tc : sm.tc) {
-            std::float_t v;
+            float v;
             bin::read(in, v); tc(0) = v;
             bin::read(in, v); tc(1) = v;
         }

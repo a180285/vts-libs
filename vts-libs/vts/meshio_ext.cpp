@@ -47,7 +47,7 @@ void loadSubmeshVersion_VERSION_FLOAT_UV(std::istream &in, SubMesh &sm, std::uin
         vertex(2) = loadVertexComponent(bbox.ll(2), bbsize(2));
 
         if (flags & SubMeshFlag::externalTexture) {
-            std::float_t v;
+            float v;
             bin::read(in, v); (*ietc)(0) = v;
             bin::read(in, v); (*ietc)(1) = v;
             ++ietc;
@@ -73,7 +73,7 @@ void loadSubmeshVersion_VERSION_FLOAT_UV(std::istream &in, SubMesh &sm, std::uin
         isShortTc = isShort(tcCount);
         sm.tc.resize(tcCount);
         for (auto &tc : sm.tc) {
-            std::float_t v;
+            float v;
             bin::read(in, v); tc(0) = v;
             bin::read(in, v); tc(1) = v;
         }
