@@ -54,17 +54,10 @@ namespace bin = utility::binaryio;
 namespace vtslibs { namespace vts { namespace detail {
 
 namespace {
-    const std::uint16_t VERSION_2 = 2;
-    const std::uint16_t VERSION_MESHJSON = 0x0103;
-    const std::uint16_t VERSION_U32_VERTICES = 0x0104;
-    const std::uint16_t VERSION_WITH_NORMAL = 0x0105;
-
     const char *NO_MESH_COMPRESSION(utility::getenv("NO_MESH_COMPRESSION"));
 
     // mesh proper
     const char MAGIC[2] = { 'M', 'E' };
-
-    const std::uint16_t VERSION = VERSION_WITH_NORMAL;
 
     // quantization coefficients
     const int GeomQuant = 1024;
@@ -398,13 +391,6 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
               (((v - o) * std::numeric_limits<std::uint16_t>::max()) / s)));
     });
 
-    auto saveTexCoord([&out](double v)
-    {
-        v = std::round(math::clamp(v, 0.0, 1.0)
-                       * std::numeric_limits<std::uint16_t>::max());
-        bin::write(out, std::uint16_t(v));
-    });
-
     auto saveNormal([&out](double v){
         assert(v >= -1 && v <= 1);
         v = std::round(math::clamp((v + 1) / 2, 0.0, 1.0)
@@ -472,8 +458,8 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
             saveVertexComponent(vertex(2), bbox.ll(2), bbsize(2));
 
             if (flags & SubMeshFlag::externalTexture) {
-                saveTexCoord((*ietc)(0));
-                saveTexCoord((*ietc)(1));
+                bin::write(out, std::float_t((*ietc)(0)));
+                bin::write(out, std::float_t((*ietc)(1)));
                 ++ietc;
             }
         }
@@ -496,8 +482,8 @@ void saveMeshVersion2(std::ostream &out, const ConstSubMeshRange &submeshes)
             bin::write(out, std::uint32_t(sm.tc.size()));
             isShortTc = isShort(sm.tc.size());
             for (const auto &tc : sm.tc) {
-                saveTexCoord(tc(0));
-                saveTexCoord(tc(1));
+                bin::write(out, std::float_t(tc(0)));
+                bin::write(out, std::float_t(tc(1)));
             }
         }
 
@@ -1102,17 +1088,29 @@ void loadMeshProperImpl(std::istream &in, const fs::path &path
         bin::read(in, bbox.ur(0));
         bin::read(in, bbox.ur(1));
         bin::read(in, bbox.ur(2));
-        if (version >= VERSION_WITH_NORMAL) {
-            loadSubmeshVersion_VERSION_WITH_NORMAL(in, meshItem, flags, bbox);
-        }
-        else if (version >= VERSION_U32_VERTICES) {
-            loadSubmeshVersion_VERSION_U32_VERTICES(in, meshItem, flags, bbox);
-        } else if (version >= VERSION_MESHJSON) {
-            loadSubmeshVersion_withJson(in, meshItem, flags, bbox);
-        } else if (version >= 3) {
-            loadSubmeshVersion3(in, meshItem, flags, bbox);
-        } else {
-            loadSubmeshVersion2(in, meshItem, flags, bbox);
+        switch (version) {
+            default:
+                LOGTHROW(err2, std::runtime_error)
+                    << "Unspported vts data version: " << version;
+                break;
+            case VERSION_FLOAT_UV:
+                loadSubmeshVersion_VERSION_FLOAT_UV(in, meshItem, flags, bbox);
+                break;
+            case VERSION_WITH_NORMAL:
+                loadSubmeshVersion_VERSION_WITH_NORMAL(in, meshItem, flags, bbox);
+                break;
+            case VERSION_U32_VERTICES:
+                loadSubmeshVersion_VERSION_U32_VERTICES(in, meshItem, flags, bbox);
+                break;
+            case VERSION_MESHJSON:
+                loadSubmeshVersion_withJson(in, meshItem, flags, bbox);
+                break;
+            case 3:
+                loadSubmeshVersion3(in, meshItem, flags, bbox);
+                break;
+            case 2:
+                loadSubmeshVersion2(in, meshItem, flags, bbox);
+                break;
         }
     }
 }

@@ -56,7 +56,8 @@ const std::uint16_t VERSION_ORIGINAL = 1;
 const std::uint16_t VERSION_ZINDEX = 2;
 const std::uint16_t VERSION_MESHJSON = 3;
 const std::uint16_t VERSION_WITH_NORMAL = 4;
-const std::uint16_t VERSION = VERSION_WITH_NORMAL;
+const std::uint16_t VERSION_FLOAT_UV = 5;
+const std::uint16_t VERSION = VERSION_FLOAT_UV;
 
 bool isShort(std::size_t size) {
     return size <= std::numeric_limits<std::uint16_t>::max();
@@ -71,13 +72,6 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
             (out, std::uint32_t
              (std::round
               (((v - o) * std::numeric_limits<std::uint32_t>::max()) / s)));
-    });
-
-    auto saveTexCoord([&out](double v)
-    {
-        v = std::round(math::clamp(v, 0.0, 1.0)
-                       * std::numeric_limits<std::uint32_t>::max());
-        bin::write(out, std::uint32_t(v));
     });
 
     auto saveNormal([&out](double v){
@@ -123,8 +117,8 @@ void saveSimpleMesh(std::ostream &out, const Mesh &mesh)
 
         const bool shortTc(isShort(sm.tc.size()));
         for (const auto &tc : sm.tc) {
-            saveTexCoord(tc(0));
-            saveTexCoord(tc(1));
+            bin::write(out, std::float_t(tc[0]));
+            bin::write(out, std::float_t(tc[1]));
         }
 
         // write normals
@@ -208,13 +202,6 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
         return o + ((v * s) / std::numeric_limits<std::uint32_t>::max());
     });
 
-    auto loadTexCoord([&in]() -> double
-    {
-        std::uint32_t v;
-        bin::read(in, v);
-        return (double(v) / std::numeric_limits<std::uint32_t>::max());
-    });
-
     auto loadNormal([&in]() -> double {
         std::uint32_t v;
         bin::read(in, v);
@@ -286,8 +273,9 @@ Mesh loadSimpleMesh(std::istream &in, const fs::path &path)
         const bool shortTc(isShort(tcCount));
         sm.tc.resize(tcCount);
         for (auto &tc : sm.tc) {
-            tc(0) = loadTexCoord();
-            tc(1) = loadTexCoord();
+            std::float_t v;
+            bin::read(in, v); tc(0) = v;
+            bin::read(in, v); tc(1) = v;
         }
 
         bool isShortNormalIndex = false;
